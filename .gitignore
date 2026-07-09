@@ -1,0 +1,6 @@
+build/
+install/
+log/
+recordings/
+*.pyc
+__pycache__/
