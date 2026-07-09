@@ -1,0 +1,18 @@
+# Bunker DVI dataset (reg-1), Livox Mid-360 exported as sensor_msgs/PointCloud2.
+# BIEVR-LIO sensor config — same schema as the upstream
+# config/sensor_configs/*.yaml files; mounted into the container and passed to
+# the launch file as an absolute path (no image rebuild needed).
+
+topics:
+  pointcloud: "/livox/pointcloud"
+  imu: "/livox/imu"
+
+calibration: # T_IMU_LIDAR (LiDAR -> IMU): Livox Mid-360 built-in IMU
+  translation: [-0.011, -0.02329, 0.04412]
+  rotation: [1, 0, 0,
+             0, 1, 0,
+             0, 0, 1]
+
+lidar:
+  min_range_m: 0.5 # Exclude points closer than this range [m]
+  max_range_m: 40  # Mid-360 usable range; the bunker is an indoor environment

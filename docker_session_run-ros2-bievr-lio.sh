@@ -7,12 +7,16 @@
 # both; the converter chunks the world points and rebuilds the trajectory from
 # the odometry.
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 IMAGE_NAME='bievr-lio_humble'
 TMUX_SESSION='ros2_BIEVR-LIO'
 
 DATASET_CONTAINER_PATH='/ros2_ws/dataset/input.bag'
 DATASET_ROS2_PATH='/tmp/dataset_ros2'
 BAG_OUTPUT_CONTAINER='/ros2_ws/recordings'
+WRAPPER_CONFIG_CONTAINER='/ros2_ws/wrapper_config'
+WRAPPER_CONFIG_HOST="${SCRIPT_DIR}/config"
 
 RECORDED_BAG_NAME="recorded-BIEVR-LIO"
 HDMAPPING_OUT_NAME="output_hdmapping"
@@ -21,10 +25,25 @@ HDMAPPING_OUT_NAME="output_hdmapping"
 ODOM_TOPIC=${ODOM_TOPIC:-/bievr_lio/odom}
 CLOUD_TOPIC=${CLOUD_TOPIC:-/bievr_lio/points/registered}
 
-# Sensor config inside the bievr_lio_ros2 package (config/sensor_configs/<name>.yaml).
-# The config selects the LiDAR/IMU topics BIEVR-LIO subscribes to, the
+# Sensor config: selects the LiDAR/IMU topics BIEVR-LIO subscribes to, the
 # LiDAR->IMU extrinsic and the usable LiDAR range.
-SENSOR_CONFIG=${SENSOR_CONFIG:-enwide}
+# This branch (Bunker-DVI-Dataset-reg-1) defaults to the repo-local
+# config/bunker.yaml (Livox Mid-360 as PointCloud2 on /livox/pointcloud).
+# Wrapper configs in this repo's config/ directory take precedence; any other
+# name falls back to the upstream package configs (enwide, ncd, gamma, mars,
+# grandtour).
+SENSOR_CONFIG=${SENSOR_CONFIG:-bunker}
+
+# Resolve the config: a file in this repo's config/ dir is mounted into the
+# container and passed as an absolute path (the BIEVR-LIO launch uses absolute
+# paths verbatim); otherwise the bare name resolves to an upstream config.
+if [[ -f "${WRAPPER_CONFIG_HOST}/${SENSOR_CONFIG}.yaml" ]]; then
+  USE_WRAPPER_CONFIG=1
+  SENSOR_CONFIG_ARG="${WRAPPER_CONFIG_CONTAINER}/${SENSOR_CONFIG}.yaml"
+else
+  USE_WRAPPER_CONFIG=0
+  SENSOR_CONFIG_ARG="${SENSOR_CONFIG}"
+fi
 
 # RViz on by default — the live view of how the algorithm tracks the dataset.
 USE_RVIZ="${USE_RVIZ:-1}"
@@ -45,8 +64,8 @@ usage() {
   echo "If no arguments are provided, a GUI file selector will be used."
   echo
   echo "Environment variables:"
-  echo "  SENSOR_CONFIG - BIEVR-LIO sensor config name (default: enwide)"
-  echo "                  available: enwide, ncd, gamma, mars, grandtour"
+  echo "  SENSOR_CONFIG - BIEVR-LIO sensor config name (default: bunker, from this repo's config/)"
+  echo "                  upstream-shipped: enwide, ncd, gamma, mars, grandtour"
   echo "  ODOM_TOPIC    - recorded odometry topic (default: /bievr_lio/odom)"
   echo "  CLOUD_TOPIC   - recorded cloud topic    (default: /bievr_lio/points/registered)"
   echo "  USE_RVIZ      - 1/0, launch RViz live view (default: 1)"
@@ -102,12 +121,17 @@ RVIZ_ARG=false; [[ "$USE_RVIZ" == "1" ]] && RVIZ_ARG=true
 echo "Input bag     : $DATASET_HOST_PATH"
 echo "Input type    : $([[ $INPUT_IS_DIR == 1 ]] && echo 'ROS 2 bag directory (no conversion)' || echo 'ROS 1 bag file (convert to ROS 2)')"
 echo "Output dir    : $BAG_OUTPUT_HOST"
-echo "Sensor config : $SENSOR_CONFIG"
+echo "Sensor config : $SENSOR_CONFIG $([[ $USE_WRAPPER_CONFIG == 1 ]] && echo "(repo config/ -> ${SENSOR_CONFIG_ARG})" || echo '(upstream package config)')"
 echo "Odom topic    : $ODOM_TOPIC"
 echo "Cloud topic   : $CLOUD_TOPIC"
 echo "RViz          : $RVIZ_ARG"
 
 xhost +local:docker >/dev/null
+
+WRAPPER_CONFIG_MOUNT=()
+if [[ "$USE_WRAPPER_CONFIG" == "1" ]]; then
+  WRAPPER_CONFIG_MOUNT=(-v "${WRAPPER_CONFIG_HOST}":"${WRAPPER_CONFIG_CONTAINER}":ro)
+fi
 
 # ── Phase 1: run BIEVR-LIO + record output topics ─────────────────────────────
 docker run -it --rm \
@@ -120,6 +144,7 @@ docker run -it --rm \
   -v /tmp/.X11-unix:/tmp/.X11-unix \
   -v "$DATASET_HOST_PATH":"$DATASET_CONTAINER_PATH":ro \
   -v "$BAG_OUTPUT_HOST":"$BAG_OUTPUT_CONTAINER" \
+  "${WRAPPER_CONFIG_MOUNT[@]}" \
   "$IMAGE_NAME" \
   /bin/bash -c '
 
@@ -157,7 +182,7 @@ source /opt/ros/humble/setup.bash
 source /ros2_ws/install/setup.bash
 sleep 2
 ros2 launch bievr_lio_ros2 process_topics.launch.py \
-  sensor_config:='"$SENSOR_CONFIG"' \
+  sensor_config:='"$SENSOR_CONFIG_ARG"' \
   rviz:='"$RVIZ_ARG"'
 '\'' C-m
 
