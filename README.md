@@ -24,14 +24,6 @@ cd ~/hdmapping-benchmark/data
 ~/hdmapping-benchmark/benchmark-BIEVR-LIO-to-HDMapping/docker_session_run-ros2-bievr-lio.sh reg-1.bag-pc.bag .
 ```
 
-The script defaults to the `bunker` sensor config (`config/bunker.yaml` in this
-repo: Livox Mid-360 as `sensor_msgs/PointCloud2` on `/livox/pointcloud` +
-`/livox/imu`), which is mounted into the container at runtime — no rebuild is
-needed when the config changes.
-
-While the bag plays you can watch BIEVR-LIO build the map live in RViz
-(press `Ctrl+b` then `0` inside the tmux session).
-
 ## Step 4 (Open and visualize data)
 Expected data should appear in `~/hdmapping-benchmark/data/output_hdmapping-BIEVR-LIO`.
 Use tool [multi_view_tls_registration_step_2](https://github.com/MapsHD/HDMapping) to open `session.json` from `~/hdmapping-benchmark/data/output_hdmapping-BIEVR-LIO`.
